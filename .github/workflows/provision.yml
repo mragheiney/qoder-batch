@@ -1,0 +1,37 @@
+name: qoder-provision
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: "Qoder account email"
+        required: true
+      password:
+        description: "Qoder account password"
+        required: true
+jobs:
+  provision:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qoder App
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://download.qoder.com/qoder-app/releases/0.5.17/Qoder-win-x64-user.exe" -OutFile qoder-setup.exe
+          Start-Process .\qoder-setup.exe -ArgumentList "/S" -Wait
+          Start-Sleep 5
+      - name: Install python deps
+        shell: pwsh
+        run: pip install websocket-client pillow captcha-recognizer requests
+      - name: Provision account
+        shell: pwsh
+        env:
+          QE: ${{ inputs.email }}
+          QP: ${{ inputs.password }}
+        run: python provision.py
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: provision-result
+          path: result.json
