@@ -14,12 +14,18 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: Install Qoder App
+      - name: Install and launch Qoder App
         shell: pwsh
         run: |
           Invoke-WebRequest "https://download.qoder.com/qoder-app/releases/0.5.17/Qoder-win-x64-user.exe" -OutFile qoder-setup.exe
           Start-Process .\qoder-setup.exe -ArgumentList "/S" -Wait
           Start-Sleep 5
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs\Qoder\Qoder.exe", "$env:ProgramFiles\Qoder\Qoder.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $exe) { $exe = (Get-ChildItem "$env:LOCALAPPDATA\Programs","$env:ProgramFiles" -Recurse -Filter "Qoder.exe" -ErrorAction SilentlyContinue | Where-Object FullName -notmatch "IDE|Launch" | Select-Object -First 1).FullName }
+          Write-Host "Qoder exe: $exe"
+          Start-Process $exe -ArgumentList "--remote-debugging-port=9224","--disable-gpu"
+          Start-Sleep 25
+          try { (Invoke-WebRequest "http://127.0.0.1:9224/json/version" -UseBasicParsing -TimeoutSec 10).Content } catch { Write-Host "CDP not up: $_" }
       - name: Install python deps
         shell: pwsh
         run: pip install websocket-client pillow captcha-recognizer requests
