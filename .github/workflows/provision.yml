@@ -23,7 +23,7 @@ jobs:
           $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs\Qoder\Qoder.exe", "$env:ProgramFiles\Qoder\Qoder.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
           if (-not $exe) { $exe = (Get-ChildItem "$env:LOCALAPPDATA\Programs","$env:ProgramFiles" -Recurse -Filter "Qoder.exe" -ErrorAction SilentlyContinue | Where-Object FullName -notmatch "IDE|Launch" | Select-Object -First 1).FullName }
           Write-Host "Qoder exe: $exe"
-          Start-Process $exe -ArgumentList "--remote-debugging-port=9224","--disable-gpu"
+          Start-Process $exe -ArgumentList "--remote-debugging-port=9224","--disable-gpu","--remote-allow-origins=*"
           Start-Sleep 25
           try { (Invoke-WebRequest "http://127.0.0.1:9224/json/version" -UseBasicParsing -TimeoutSec 10).Content } catch { Write-Host "CDP not up: $_" }
       - name: Install python deps
