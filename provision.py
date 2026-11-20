@@ -14,7 +14,7 @@ class CDP:
         self.port = port
         t = requests.get(f"http://127.0.0.1:{port}/json", timeout=10).json()
         self.page = next(x for x in t if x.get("type") == "page" and x.get("url"))
-        self.ws = websocket.create_connection(f'ws://127.0.0.1:{port}/devtools/page/{self.page["id"]}', timeout=30)
+        self.ws = websocket.create_connection(f'ws://127.0.0.1:{port}/devtools/page/{self.page["id"]}', timeout=30, suppress_origin=True)
         self.seq = 0
     def send(self, method, params=None):
         self.seq += 1
