@@ -27,32 +27,29 @@ jobs:
       - name: Install python deps
         shell: pwsh
         run: pip install websocket-client pillow captcha-recognizer requests pproxy
-      - name: Setup proxy and launch App
-        shell: pwsh
-        env:
-          PROXY_UP: ${{ inputs.proxy }}
-        run: |
-          if ($env:PROXY_UP) {
-            Start-Process python -ArgumentList "-m","pproxy","-l","http://127.0.0.1:3128","-r","$env:PROXY_UP","--quiet" -WindowStyle Hidden
-            Start-Sleep 6
-            Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" -Name ProxyEnable -Value 1
-            Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" -Name ProxyServer -Value "127.0.0.1:3128"
-            Write-Host "system proxy set to 127.0.0.1:3128"
-            try { $ip = (Invoke-WebRequest "http://api.ipify.org" -Proxy "http://127.0.0.1:3128" -UseBasicParsing -TimeoutSec 40).Content; Write-Host "proxied exit IP: $ip" } catch { Write-Host "ip check failed: $_" }
-          }
-          $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs\Qoder\Qoder.exe", "$env:ProgramFiles\Qoder\Qoder.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $exe) { $exe = (Get-ChildItem "$env:LOCALAPPDATA\Programs","$env:ProgramFiles" -Recurse -Filter "Qoder.exe" -ErrorAction SilentlyContinue | Where-Object FullName -notmatch "IDE|Launch" | Select-Object -First 1).FullName }
-          Write-Host "Qoder exe: $exe"
-          Start-Process $exe -ArgumentList "--remote-debugging-port=9224","--disable-gpu","--remote-allow-origins=*"
-          Start-Sleep 25
-          try { (Invoke-WebRequest "http://127.0.0.1:9224/json/version" -UseBasicParsing -TimeoutSec 10).Content } catch { Write-Host "CDP not up: $_" }
       - name: Provision account
         shell: pwsh
         env:
           QE: ${{ inputs.email }}
           QP: ${{ inputs.password }}
-          PROXY_LOCAL: ${{ inputs.proxy != '' && 'http://127.0.0.1:3128' || '' }}
-        run: python provision.py
+          PROXY_UP: ${{ inputs.proxy }}
+        run: |
+          $env:PROXY_LOCAL = ""
+          if ($env:PROXY_UP) {
+            Start-Process python -ArgumentList "-m","pproxy","-l","http://127.0.0.1:3128","-r","$env:PROXY_UP","--quiet" -WindowStyle Hidden
+            Start-Sleep 6
+            try { $ip = (Invoke-WebRequest "http://api.ipify.org" -Proxy "http://127.0.0.1:3128" -UseBasicParsing -TimeoutSec 40).Content; Write-Host "proxied exit IP: $ip" } catch { Write-Host "ip check failed: $_" }
+            $env:PROXY_LOCAL = "http://127.0.0.1:3128"
+          }
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs\Qoder\Qoder.exe", "$env:ProgramFiles\Qoder\Qoder.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $exe) { $exe = (Get-ChildItem "$env:LOCALAPPDATA\Programs","$env:ProgramFiles" -Recurse -Filter "Qoder.exe" -ErrorAction SilentlyContinue | Where-Object FullName -notmatch "IDE|Launch" | Select-Object -First 1).FullName }
+          Write-Host "Qoder exe: $exe"
+          $launchArgs = @("--remote-debugging-port=9224","--disable-gpu","--remote-allow-origins=*")
+          if ($env:PROXY_LOCAL) { $launchArgs += "--proxy-server=http://127.0.0.1:3128" }
+          Start-Process $exe -ArgumentList $launchArgs
+          Start-Sleep 25
+          try { (Invoke-WebRequest "http://127.0.0.1:9224/json/version" -UseBasicParsing -TimeoutSec 10).Content } catch { Write-Host "CDP not up: $_" }
+          python provision.py
       - name: Upload result
         if: always()
         uses: actions/upload-artifact@v4
