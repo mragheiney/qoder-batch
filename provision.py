@@ -148,8 +148,41 @@ def main():
             time.sleep(3)
         app.ev('''(() => { const b=[...document.querySelectorAll("button,a,[role=button]")].find(e=>(e.textContent||"").trim()==="Log in immediately"); if(b) b.click(); return "C"; })()''')
         time.sleep(6)
-        app.focus()
-        url = app.ev('''navigator.clipboard.readText().catch(e => "ERR:" + e.message)''')
+        # Network 嗅探 device flow URL（App 内部 device/code 请求的响应里有 verification_uri）
+        app.send("Network.enable")
+        url = None
+        deadline = time.time() + 25
+        while time.time() < deadline and not url:
+            try:
+                app.ws.settimeout(3)
+                d = json.loads(app.ws.recv())
+                m = d.get("method", "")
+                if m == "Network.responseReceived":
+                    u = d["params"]["response"]["url"]
+                    if any(k in u for k in ("device", "oauth", "sign-in", "login")) and "qoder" in u:
+                        rid = d["params"]["requestId"]
+                        try:
+                            body = app.send("Network.getResponseBody", {"requestId": rid})
+                            txt = body.get("body", "")
+                            j = json.loads(txt) if txt.strip().startswith("{") else {}
+                            for key in ("verification_uri_complete", "verification_url", "verification_uri", "signInUrl", "url"):
+                                v = j.get(key) or (j.get("data") or {}).get(key) if isinstance(j.get("data"), dict) else j.get(key)
+                                if v and str(v).startswith("http"):
+                                    url = v; break
+                        except Exception:
+                            pass
+                elif m == "Network.requestWillBeSent":
+                    u = d["params"]["request"]["url"]
+                    if u.startswith("https://qoder.com/device/"):
+                        url = u
+            except websocket.WebSocketTimeoutException:
+                pass
+            except Exception:
+                pass
+        app.ws.settimeout(30)
+        if not url:
+            app.focus()
+            url = app.ev('''navigator.clipboard.readText().catch(e => "ERR:" + e.message)''')
         if not url or not str(url).startswith("http"):
             app.focus()
             app.ev('''(() => { const b=[...document.querySelectorAll("button")].find(e=>(e.textContent||"").includes("Copy sign-in link")); if(b) b.click(); return "C"; })()''')
