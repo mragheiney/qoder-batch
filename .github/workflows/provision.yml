@@ -8,6 +8,10 @@ on:
       password:
         description: "Qoder account password"
         required: true
+      proxy:
+        description: "Upstream proxy http://user:pass@host:port (optional)"
+        required: false
+        default: ""
 jobs:
   provision:
     runs-on: windows-latest
@@ -16,10 +20,21 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install and launch Qoder App
         shell: pwsh
+        env:
+          PROXY_UP: ${{ inputs.proxy }}
         run: |
           Invoke-WebRequest "https://download.qoder.com/qoder-app/releases/0.5.17/Qoder-win-x64-user.exe" -OutFile qoder-setup.exe
           Start-Process .\qoder-setup.exe -ArgumentList "/S" -Wait
           Start-Sleep 5
+          if ($env:PROXY_UP) {
+            pip install pproxy
+            Start-Process python -ArgumentList "-m","pproxy","-l","http://127.0.0.1:3128","-r","$env:PROXY_UP","--quiet" -WindowStyle Hidden
+            Start-Sleep 6
+            Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" -Name ProxyEnable -Value 1
+            Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" -Name ProxyServer -Value "127.0.0.1:3128"
+            Write-Host "system proxy set to 127.0.0.1:3128"
+            try { $ip = (Invoke-WebRequest "http://api.ipify.org" -Proxy "http://127.0.0.1:3128" -UseBasicParsing -TimeoutSec 40).Content; Write-Host "proxied exit IP: $ip" } catch { Write-Host "ip check failed: $_" }
+          }
           $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs\Qoder\Qoder.exe", "$env:ProgramFiles\Qoder\Qoder.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
           if (-not $exe) { $exe = (Get-ChildItem "$env:LOCALAPPDATA\Programs","$env:ProgramFiles" -Recurse -Filter "Qoder.exe" -ErrorAction SilentlyContinue | Where-Object FullName -notmatch "IDE|Launch" | Select-Object -First 1).FullName }
           Write-Host "Qoder exe: $exe"
@@ -34,6 +49,7 @@ jobs:
         env:
           QE: ${{ inputs.email }}
           QP: ${{ inputs.password }}
+          PROXY_LOCAL: ${{ inputs.proxy != '' && 'http://127.0.0.1:3128' || '' }}
         run: python provision.py
       - name: Upload result
         if: always()
