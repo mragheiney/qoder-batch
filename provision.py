@@ -224,8 +224,9 @@ def main():
         result["steps"].append("verify")
     except Exception as e:
         result["error"] = repr(e)
-    json.dump(result, open("result.json", "w"), ensure_ascii=False, indent=1)
-    print(json.dumps(result, ensure_ascii=False))
+    with open("result.json", "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=True, indent=1)
+    print(json.dumps(result, ensure_ascii=True))
     sys.exit(0 if result["ok"] else 1)
 
 main()
