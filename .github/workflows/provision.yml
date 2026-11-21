@@ -18,16 +18,21 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: Install and launch Qoder App
+      - name: Install Qoder App
         shell: pwsh
-        env:
-          PROXY_UP: ${{ inputs.proxy }}
         run: |
           Invoke-WebRequest "https://download.qoder.com/qoder-app/releases/0.5.17/Qoder-win-x64-user.exe" -OutFile qoder-setup.exe
           Start-Process .\qoder-setup.exe -ArgumentList "/S" -Wait
           Start-Sleep 5
+      - name: Install python deps
+        shell: pwsh
+        run: pip install websocket-client pillow captcha-recognizer requests pproxy
+      - name: Setup proxy and launch App
+        shell: pwsh
+        env:
+          PROXY_UP: ${{ inputs.proxy }}
+        run: |
           if ($env:PROXY_UP) {
-            pip install pproxy
             Start-Process python -ArgumentList "-m","pproxy","-l","http://127.0.0.1:3128","-r","$env:PROXY_UP","--quiet" -WindowStyle Hidden
             Start-Sleep 6
             Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" -Name ProxyEnable -Value 1
@@ -41,9 +46,6 @@ jobs:
           Start-Process $exe -ArgumentList "--remote-debugging-port=9224","--disable-gpu","--remote-allow-origins=*"
           Start-Sleep 25
           try { (Invoke-WebRequest "http://127.0.0.1:9224/json/version" -UseBasicParsing -TimeoutSec 10).Content } catch { Write-Host "CDP not up: $_" }
-      - name: Install python deps
-        shell: pwsh
-        run: pip install websocket-client pillow captcha-recognizer requests
       - name: Provision account
         shell: pwsh
         env:
