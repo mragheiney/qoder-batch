@@ -26,7 +26,7 @@ jobs:
           Start-Sleep 5
       - name: Install python deps
         shell: pwsh
-        run: pip install websocket-client pillow captcha-recognizer requests pproxy
+        run: pip install websocket-client pillow captcha-recognizer requests
       - name: Provision account
         shell: pwsh
         env:
@@ -36,7 +36,7 @@ jobs:
         run: |
           $env:PROXY_LOCAL = ""
           if ($env:PROXY_UP) {
-            Start-Process python -ArgumentList "-m","pproxy","-l","http://127.0.0.1:3128","-r","$env:PROXY_UP","--quiet" -WindowStyle Hidden
+            Start-Process python -ArgumentList "fwd.py","$env:PROXY_UP" -WindowStyle Hidden
             Start-Sleep 6
             try { $ip = (Invoke-WebRequest "http://api.ipify.org" -Proxy "http://127.0.0.1:3128" -UseBasicParsing -TimeoutSec 40).Content; Write-Host "proxied exit IP: $ip" } catch { Write-Host "ip check failed: $_" }
             $env:PROXY_LOCAL = "http://127.0.0.1:3128"
