@@ -182,21 +182,26 @@ def main():
         app.ws.settimeout(30)
         if not url:
             # 系统剪贴板直读（App Copy 按钮写的是系统剪贴板）
+            result["diag_waiting_text"] = (app.ev("document.body.innerText") or "").replace("\n", " ")[:200]
+            result["diag_copy_click"] = app.ev('''(() => { const b=[...document.querySelectorAll("button")].find(e=>(e.textContent||"").includes("Copy sign-in link")); if(!b) return "NO_BTN"; b.click(); return "CLICKED"; })()''')
+            time.sleep(2)
             import ctypes
+            clip = None
             try:
-                ctypes.windll.user32.OpenClipboard(0)
-                h = ctypes.windll.user32.GetClipboardData(13)  # CF_UNICODETEXT
-                if h:
-                    p = ctypes.windll.kernel32.GlobalLock(h)
-                    url = ctypes.wstring_at(p)
-                    ctypes.windll.kernel32.GlobalUnlock(h)
+                ok_open = ctypes.windll.user32.OpenClipboard(0)
+                h2 = ctypes.windll.user32.GetClipboardData(13)  # CF_UNICODETEXT
+                if h2:
+                    p = ctypes.windll.kernel32.GlobalLock(h2)
+                    clip = ctypes.wstring_at(p)
+                    ctypes.windll.kernel32.GlobalUnlock(h2)
                 ctypes.windll.user32.CloseClipboard()
             except Exception as e:
-                url = "CLIP_ERR:" + repr(e)
+                clip = "CLIP_ERR:" + repr(e)
+            result["diag_clipboard"] = (clip or "EMPTY")[:120]
+            if clip and str(clip).startswith("http"):
+                url = clip
         if not url or not str(url).startswith("http"):
             app.focus()
-            app.ev('''(() => { const b=[...document.querySelectorAll("button")].find(e=>(e.textContent||"").includes("Copy sign-in link")); if(b) b.click(); return "C"; })()''')
-            time.sleep(1.5)
             url = app.ev('''navigator.clipboard.readText().catch(e => "ERR:" + e.message)''')
         if not url or not str(url).startswith("http"):
             raise RuntimeError("no signin url: " + str(url))
