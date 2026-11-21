@@ -3,13 +3,13 @@ on:
   workflow_dispatch:
     inputs:
       email:
-        description: "Qoder account email"
+        description: Qoder account email
         required: true
       password:
-        description: "Qoder account password"
+        description: Qoder account password
         required: true
       proxy:
-        description: "Upstream proxy http://user:pass@host:port (optional)"
+        description: Upstream proxy http://user:pass@host:port
         required: false
         default: ""
 jobs:
