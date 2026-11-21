@@ -195,16 +195,31 @@ def main():
             time.sleep(2)
             import ctypes
             clip = None
+            # 方式1: PowerShell Get-Clipboard（最稳）
             try:
-                ok_open = ctypes.windll.user32.OpenClipboard(0)
-                h2 = ctypes.windll.user32.GetClipboardData(13)  # CF_UNICODETEXT
-                if h2:
-                    p = ctypes.windll.kernel32.GlobalLock(h2)
-                    clip = ctypes.wstring_at(p)
-                    ctypes.windll.kernel32.GlobalUnlock(h2)
-                ctypes.windll.user32.CloseClipboard()
-            except Exception as e:
-                clip = "CLIP_ERR:" + repr(e)
+                clip = subprocess.check_output(
+                    ["powershell", "-NoProfile", "-STA", "-Command", "Get-Clipboard"],
+                    timeout=15, stderr=subprocess.DEVNULL).decode("utf-8", "replace").strip() or None
+            except Exception:
+                clip = None
+            # 方式2: ctypes（restype 必须 c_void_p，否则 64 位指针截断 → access violation）
+            if not clip:
+                try:
+                    u32 = ctypes.windll.user32
+                    k32 = ctypes.windll.kernel32
+                    u32.GetClipboardData.restype = ctypes.c_void_p
+                    k32.GlobalLock.restype = ctypes.c_void_p
+                    if u32.OpenClipboard(0):
+                        h2 = u32.GetClipboardData(13)  # CF_UNICODETEXT
+                        if h2:
+                            p = k32.GlobalLock(h2)
+                            if p:
+                                clip = ctypes.wstring_at(p)
+                                k32.GlobalUnlock(ctypes.c_void_p(h2))
+                        u32.CloseClipboard()
+                except Exception as e:
+                    if not clip:
+                        clip = "CLIP_ERR:" + repr(e)
             result["diag_clipboard"] = (clip or "EMPTY")[:120]
             if clip and str(clip).startswith("http"):
                 url = clip
