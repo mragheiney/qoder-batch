@@ -90,25 +90,38 @@ def wait_captcha(cdp, timeout=25):
         time.sleep(1)
     return False
 
+def click_btn(c, texts):
+    for t in texts:
+        r = c.ev(f'''(() => {{
+          const b=[...document.querySelectorAll("button")].filter(e=>(e.textContent||"").replace(/\\s+/g,"")==={json.dumps(t)}&&e.offsetParent!==null);
+          if(b.length){{ b[b.length-1].click(); return "CLICKED"; }}
+          return "NO";
+        }})()''')
+        if r == "CLICKED":
+            return t
+    return None
+
 def chrome_login_and_authorize(signin_url):
     chro = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
     subprocess.Popen([chro, "--headless=new", f"--remote-debugging-port={CHR_PORT}",
                       f"--user-data-dir={os.environ['TEMP']}\\ghc", "--no-first-run",
-                      "--window-size=1400,950", "about:blank"],
+                      "--lang=zh-CN", "--window-size=1400,950", "about:blank"],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(6)
     c = CDP(CHR_PORT)
+    c.send("Network.setExtraHTTPHeaders", {"headers": {"Accept-Language": "zh-CN,zh;q=0.9"}})
     c.send("Page.navigate", {"url": "https://qoder.com/users/sign-in?product=ide"})
     time.sleep(8)
+    DIAG["login_lang_check"] = (c.ev("document.body.innerText") or "").replace("\n", " ")[:60]
     c.ev('''(() => {
-      const el = document.querySelector("input[type=email], input[name=email], input[placeholder*='邮箱'], input[name='user[email]']");
+      const el = document.querySelector("input[type=email], input[name=email], input[placeholder*='邮箱'], input[placeholder*='Email'], input[name='user[email]']");
       if (!el) return "NF";
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, arguments_qe);
       el.dispatchEvent(new Event("input", {bubbles:true}));
       return "OK";
     })()'''.replace("arguments_qe", json.dumps(EMAIL)))
     time.sleep(1)
-    c.ev('''(() => { const b=[...document.querySelectorAll("button")].find(e=>(e.textContent||"").replace(/\\s+/g,"")==="继 续"); if(b) b.click(); return "C"; })()''')
+    DIAG["login_continue"] = str(click_btn(c, ["继续", "Continue"]))
     time.sleep(4.5)
     c.ev('''(() => {
       const els = [...document.querySelectorAll("input[type=password]")].filter(e=>e.offsetParent!==null);
@@ -119,11 +132,11 @@ def chrome_login_and_authorize(signin_url):
       return "OK";
     })()'''.replace("arguments_qp", json.dumps(PASSWORD)))
     time.sleep(1)
-    c.ev('''(() => { const b=[...document.querySelectorAll("button")].filter(e=>(e.textContent||"").replace(/\\s+/g,"")==="登录"&&e.offsetParent!==null); if(b.length) b[b.length-1].click(); return "C"; })()''')
+    DIAG["login_submit"] = str(click_btn(c, ["登录", "Log in", "Sign in"]))
     time.sleep(6)
     for attempt in range(3):
         if wait_captcha(c, 20):
-            c.ev('''(() => { const els=[...document.querySelectorAll("*")].filter(e=>["BUTTON","DIV","SPAN","A","P"].includes(e.tagName)&&(e.textContent||"").replace(/\\s+/g,"")==="点击开始验证"&&e.children.length<=1); if(els.length) els[els.length-1].click(); return "C"; })()''')
+            c.ev('''(() => { const els=[...document.querySelectorAll("*")].filter(e=>["BUTTON","DIV","SPAN","A","P"].includes(e.tagName)&&((e.textContent||"").replace(/\\s+/g,"")==="点击开始验证"||(e.textContent||"").trim()==="Click to start verification")&&e.children.length<=1); if(els.length) els[els.length-1].click(); return "C"; })()''')
             time.sleep(5)
             ok = solve_slider(c)
             DIAG["slider_attempt_%d" % attempt] = str(ok)
@@ -138,6 +151,7 @@ def chrome_login_and_authorize(signin_url):
         open("chrome-after-login.png", "wb").write(c.shot())
     except Exception:
         pass
+    c.send("Network.setExtraHTTPHeaders", {"headers": {"Accept-Language": "zh-CN,zh;q=0.9"}})
     c.send("Page.navigate", {"url": signin_url})
     time.sleep(8)
     DIAG["auth_page_url"] = (c.ev("location.href") or "")[:100]
@@ -146,9 +160,40 @@ def chrome_login_and_authorize(signin_url):
         open("chrome-auth-page.png", "wb").write(c.shot())
     except Exception:
         pass
-    DIAG["auth_continue_click"] = c.ev('''(() => { const b=[...document.querySelectorAll("button")].find(e=>(e.textContent||"").replace(/\\s+/g,"")==="继续登录"); if(!b) return "NO_BTN"; b.click(); return "CLICKED"; })()''')
+    # 授权页若被重定向到登录页（登录态没建立），现场重登一次再回授权
+    if "sign-in" in DIAG["auth_page_url"]:
+        c.ev('''(() => {
+          const el = document.querySelector("input[type=email], input[name=email], input[placeholder*='Email'], input[name='user[email]']");
+          if (!el) return "NF";
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, arguments_qe);
+          el.dispatchEvent(new Event("input", {bubbles:true}));
+          return "OK";
+        })()'''.replace("arguments_qe", json.dumps(EMAIL)))
+        time.sleep(1)
+        click_btn(c, ["继续", "Continue"])
+        time.sleep(4.5)
+        c.ev('''(() => {
+          const els = [...document.querySelectorAll("input[type=password]")].filter(e=>e.offsetParent!==null);
+          const el = els[els.length-1];
+          if (!el) return "NF";
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, arguments_qp);
+          el.dispatchEvent(new Event("input", {bubbles:true}));
+          return "OK";
+        })()'''.replace("arguments_qp", json.dumps(PASSWORD)))
+        time.sleep(1)
+        click_btn(c, ["登录", "Log in", "Sign in"])
+        time.sleep(6)
+        if wait_captcha(c, 20):
+            c.ev('''(() => { const els=[...document.querySelectorAll("*")].filter(e=>["BUTTON","DIV","SPAN","A","P"].includes(e.tagName)&&((e.textContent||"").replace(/\\s+/g,"")==="点击开始验证"||(e.textContent||"").trim()==="Click to start verification")&&e.children.length<=1); if(els.length) els[els.length-1].click(); return "C"; })()''')
+            time.sleep(5)
+            solve_slider(c)
+            time.sleep(6)
+        DIAG["auth_relogin_text"] = (c.ev("document.body.innerText") or "").replace("\n", " ")[:150]
+        DIAG["auth_relogin_url"] = (c.ev("location.href") or "")[:100]
+    DIAG["auth_continue_click"] = str(click_btn(c, ["继续登录", "Continue", "Allow"]))
     time.sleep(8)
     DIAG["after_auth_text"] = (c.ev("document.body.innerText") or "").replace("\n", " ")[:200]
+    DIAG["after_auth_url"] = (c.ev("location.href") or "")[:100]
     try:
         open("chrome-after-auth.png", "wb").write(c.shot())
     except Exception:
