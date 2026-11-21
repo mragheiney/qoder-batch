@@ -47,19 +47,27 @@ def solve_slider(cdp, img_el_id="aliyunCaptcha-img"):
       const r = e.getBoundingClientRect();
       return JSON.stringify([r.x, r.y, r.width, r.height]);
     }})()'''))
+    DIAG["slider_geo"] = str(geo)
     if not geo: return False
     x, y, w, h = geo
     png = cdp.shot({"x": x, "y": y, "width": w, "height": h})
+    try:
+        open("slider-shot.png", "wb").write(png)
+    except Exception:
+        pass
     import cv2, numpy as np
     img = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_COLOR)
     r = Slider().identify(img[:, :, ::-1])
     box, conf = r[0], float(r[1])
+    DIAG["slider_box"] = str(box)[:80]
+    DIAG["slider_conf"] = conf
     if conf < 0.3: return False
     target = float(box[0]) / 2.0
     disc = A * A + 4 * B * target
     D = (-A + disc ** 0.5) / (2 * B)
-    sx, sy = x + 20, y + 208 + 20
+    DIAG["slider_D"] = round(D, 1)
     sgeo = json.loads(cdp.ev('''(() => { let e=document.getElementById("aliyunCaptcha-sliding-slider"); if(!e){let f=null;const d=(r)=>r.querySelectorAll("*").forEach(x=>{if(!f&&x.id==="aliyunCaptcha-sliding-slider")f=x; if(x.shadowRoot)d(x.shadowRoot);}); d(document); e=f;} if(!e) return null; const r=e.getBoundingClientRect(); return JSON.stringify([r.x,r.y,r.width,r.height]); })()'''))
+    DIAG["slider_handle_geo"] = str(sgeo)
     if not sgeo: return False
     sx, sy = sgeo[0] + sgeo[2]/2, sgeo[1] + sgeo[3]/2
     cdp.send("Input.dispatchMouseEvent", {"type": "mouseMoved", "x": sx-70, "y": sy+10, "button": "none"})
@@ -85,7 +93,7 @@ def solve_slider(cdp, img_el_id="aliyunCaptcha-img"):
 def wait_captcha(cdp, timeout=25):
     for _ in range(timeout):
         t = cdp.ev("document.body.innerText")
-        if t and ("安全验证" in t or "拖动滑块" in t):
+        if t and ("安全验证" in t or "拖动滑块" in t or "点击开始验证" in t or "verification" in t):
             return True
         time.sleep(1)
     return False
