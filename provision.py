@@ -181,8 +181,18 @@ def main():
                 pass
         app.ws.settimeout(30)
         if not url:
-            app.focus()
-            url = app.ev('''navigator.clipboard.readText().catch(e => "ERR:" + e.message)''')
+            # 系统剪贴板直读（App Copy 按钮写的是系统剪贴板）
+            import ctypes
+            try:
+                ctypes.windll.user32.OpenClipboard(0)
+                h = ctypes.windll.user32.GetClipboardData(13)  # CF_UNICODETEXT
+                if h:
+                    p = ctypes.windll.kernel32.GlobalLock(h)
+                    url = ctypes.wstring_at(p)
+                    ctypes.windll.kernel32.GlobalUnlock(h)
+                ctypes.windll.user32.CloseClipboard()
+            except Exception as e:
+                url = "CLIP_ERR:" + repr(e)
         if not url or not str(url).startswith("http"):
             app.focus()
             app.ev('''(() => { const b=[...document.querySelectorAll("button")].find(e=>(e.textContent||"").includes("Copy sign-in link")); if(b) b.click(); return "C"; })()''')
