@@ -8,6 +8,7 @@ APP_PORT = 9224
 CHR_PORT = 9225
 A, B = 0.0769, 0.003552
 EMAIL = os.environ["QE"]; PASSWORD = os.environ["QP"]
+DIAG = {}
 
 class CDP:
     def __init__(self, port):
@@ -124,16 +125,34 @@ def chrome_login_and_authorize(signin_url):
         if wait_captcha(c, 20):
             c.ev('''(() => { const els=[...document.querySelectorAll("*")].filter(e=>["BUTTON","DIV","SPAN","A","P"].includes(e.tagName)&&(e.textContent||"").replace(/\\s+/g,"")==="点击开始验证"&&e.children.length<=1); if(els.length) els[els.length-1].click(); return "C"; })()''')
             time.sleep(5)
-            if solve_slider(c):
-                time.sleep(6)
-        t = c.ev("document.body.innerText") or ""
-        if "个人中心" in t or "profile" in (c.page.get("url") or "") or "安全验证" not in t and "登录" not in t:
+            ok = solve_slider(c)
+            DIAG["slider_attempt_%d" % attempt] = str(ok)
+            time.sleep(6)
+        DIAG["chrome_login_url_%d" % attempt] = (c.ev("location.href") or "")[:80]
+        DIAG["chrome_login_text_%d" % attempt] = (c.ev("document.body.innerText") or "").replace("\n", " ")[:120]
+        u = DIAG["chrome_login_url_%d" % attempt]
+        if "/users/sign-in" not in u and "login" not in u:
             break
-    cur = c.page.get("url") or ""
+        time.sleep(2)
+    try:
+        open("chrome-after-login.png", "wb").write(c.shot())
+    except Exception:
+        pass
     c.send("Page.navigate", {"url": signin_url})
     time.sleep(8)
-    c.ev('''(() => { const b=[...document.querySelectorAll("button")].find(e=>(e.textContent||"").replace(/\\s+/g,"")==="继续登录"); if(b) b.click(); return "C"; })()''')
-    time.sleep(6)
+    DIAG["auth_page_url"] = (c.ev("location.href") or "")[:100]
+    DIAG["auth_page_text"] = (c.ev("document.body.innerText") or "").replace("\n", " ")[:200]
+    try:
+        open("chrome-auth-page.png", "wb").write(c.shot())
+    except Exception:
+        pass
+    DIAG["auth_continue_click"] = c.ev('''(() => { const b=[...document.querySelectorAll("button")].find(e=>(e.textContent||"").replace(/\\s+/g,"")==="继续登录"); if(!b) return "NO_BTN"; b.click(); return "CLICKED"; })()''')
+    time.sleep(8)
+    DIAG["after_auth_text"] = (c.ev("document.body.innerText") or "").replace("\n", " ")[:200]
+    try:
+        open("chrome-after-auth.png", "wb").write(c.shot())
+    except Exception:
+        pass
     return True
 
 def main():
@@ -233,12 +252,22 @@ def main():
         chrome_login_and_authorize(url)
         result["steps"].append("authorized")
         time.sleep(8)
-        t = app.ev("document.body.innerText") or ""
+        # App 收号轮询：最多 75 秒等 "Waiting" 消失
+        for i in range(15):
+            t = app.ev("document.body.innerText") or ""
+            if "Waiting" not in t and "Log in immediately" not in t:
+                break
+            time.sleep(5)
         result["app_text"] = t.replace("\n", " ")[:150]
+        try:
+            open("app-final.png", "wb").write(app.shot())
+        except Exception:
+            pass
         result["ok"] = ("Log in immediately" not in t and "Waiting" not in t)
         result["steps"].append("verify")
     except Exception as e:
         result["error"] = repr(e)
+    result.update(DIAG)
     with open("result.json", "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=True, indent=1)
     print(json.dumps(result, ensure_ascii=True))
