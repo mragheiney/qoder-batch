@@ -206,7 +206,7 @@ def chrome_login_and_authorize(signin_url):
         open("chrome-after-auth.png", "wb").write(c.shot())
     except Exception:
         pass
-    return True
+    return c
 
 def main():
     result = {"ok": False, "email": EMAIL, "steps": []}
@@ -302,8 +302,31 @@ def main():
             raise RuntimeError("no signin url: " + str(url))
         result["signin_url"] = url[:60] + "..."
         result["steps"].append("signin-url")
-        chrome_login_and_authorize(url)
+        c = chrome_login_and_authorize(url)
         result["steps"].append("authorized")
+        # 服务端视角诊断：runner 出口 IP + 会话表 + .qoder 指纹缓存
+        try:
+            DIAG["runner_ip"] = requests.get("https://api.ipify.org", timeout=15).text
+        except Exception as e:
+            DIAG["runner_ip"] = "ERR:" + repr(e)
+        try:
+            c.send("Page.navigate", {"url": "https://qoder.com/account/profile"})
+            time.sleep(9)
+            DIAG["profile_text"] = (c.ev("document.body.innerText") or "").replace("\n", " ")[:900]
+        except Exception as e:
+            DIAG["profile_text"] = "ERR:" + repr(e)
+        qd = os.path.join(os.path.expanduser("~"), ".qoder")
+        try:
+            DIAG["qoder_dir"] = str(os.listdir(qd))
+        except Exception:
+            DIAG["qoder_dir"] = "NO_DIR"
+        for fn in ["umid-cache.json", "state.json", "installation_id"]:
+            p = os.path.join(qd, fn)
+            if os.path.exists(p):
+                try:
+                    DIAG["qf_" + fn] = open(p, encoding="utf-8", errors="replace").read()[:500]
+                except Exception as e:
+                    DIAG["qf_" + fn] = "ERR:" + repr(e)
         time.sleep(8)
         # App 收号轮询：最多 75 秒等 "Waiting" 消失
         for i in range(15):
