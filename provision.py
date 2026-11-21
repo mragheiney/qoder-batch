@@ -26,6 +26,12 @@ class CDP:
     def ev(self, expr):
         r = self.send("Runtime.evaluate", {"expression": expr, "returnByValue": True, "awaitPromise": True, "userGesture": True})
         return r.get("result", {}).get("value")
+    def focus(self):
+        try:
+            self.send("Page.bringToFront")
+            self.send("Browser.grantPermissions", {"permissions": ["clipboardReadWrite", "clipboardSanitizedWrite", "clipboard-read", "clipboard-write"]})
+        except Exception:
+            pass
     def shot(self, clip=None):
         p = {"format": "png"}
         if clip: p["clip"] = {**clip, "scale": 2}
@@ -142,8 +148,10 @@ def main():
             time.sleep(3)
         app.ev('''(() => { const b=[...document.querySelectorAll("button,a,[role=button]")].find(e=>(e.textContent||"").trim()==="Log in immediately"); if(b) b.click(); return "C"; })()''')
         time.sleep(6)
+        app.focus()
         url = app.ev('''navigator.clipboard.readText().catch(e => "ERR:" + e.message)''')
         if not url or not str(url).startswith("http"):
+            app.focus()
             app.ev('''(() => { const b=[...document.querySelectorAll("button")].find(e=>(e.textContent||"").includes("Copy sign-in link")); if(b) b.click(); return "C"; })()''')
             time.sleep(1.5)
             url = app.ev('''navigator.clipboard.readText().catch(e => "ERR:" + e.message)''')
