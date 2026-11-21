@@ -147,6 +147,10 @@ def main():
             if "Log in" in t: break
             time.sleep(3)
         app.ev('''(() => { const b=[...document.querySelectorAll("button,a,[role=button]")].find(e=>(e.textContent||"").trim()==="Log in immediately"); if(b) b.click(); return "C"; })()''')
+        try:
+            open("app-welcome.png", "wb").write(app.shot())
+        except Exception:
+            pass
         time.sleep(6)
         # Network 嗅探 device flow URL（App 内部 device/code 请求的响应里有 verification_uri）
         app.send("Network.enable")
@@ -182,6 +186,10 @@ def main():
         app.ws.settimeout(30)
         if not url:
             # 系统剪贴板直读（App Copy 按钮写的是系统剪贴板）
+            try:
+                open("app-waiting.png", "wb").write(app.shot())
+            except Exception:
+                pass
             result["diag_waiting_text"] = (app.ev("document.body.innerText") or "").replace("\n", " ")[:200]
             result["diag_copy_click"] = app.ev('''(() => { const b=[...document.querySelectorAll("button")].find(e=>(e.textContent||"").includes("Copy sign-in link")); if(!b) return "NO_BTN"; b.click(); return "CLICKED"; })()''')
             time.sleep(2)
