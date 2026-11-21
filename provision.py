@@ -111,9 +111,12 @@ def click_btn(c, texts):
 
 def chrome_login_and_authorize(signin_url):
     chro = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+    proxy_args = []
+    if os.environ.get("PROXY_LOCAL"):
+        proxy_args = ["--proxy-server=" + os.environ["PROXY_LOCAL"]]
     subprocess.Popen([chro, "--headless=new", f"--remote-debugging-port={CHR_PORT}",
                       f"--user-data-dir={os.environ['TEMP']}\\ghc", "--no-first-run",
-                      "--lang=zh-CN", "--window-size=1400,950", "about:blank"],
+                      "--lang=zh-CN", "--window-size=1400,950"] + proxy_args + ["about:blank"],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(6)
     c = CDP(CHR_PORT)
@@ -306,9 +309,13 @@ def main():
         result["steps"].append("authorized")
         # 服务端视角诊断：runner 出口 IP + 会话表 + .qoder 指纹缓存
         try:
-            DIAG["runner_ip"] = requests.get("https://api.ipify.org", timeout=15).text
+            if os.environ.get("PROXY_LOCAL"):
+                px = {"http": os.environ["PROXY_LOCAL"], "https": os.environ["PROXY_LOCAL"]}
+                DIAG["proxied_ip"] = requests.get("https://api.ipify.org", proxies=px, timeout=30).text
+            else:
+                DIAG["runner_ip"] = requests.get("https://api.ipify.org", timeout=15).text
         except Exception as e:
-            DIAG["runner_ip"] = "ERR:" + repr(e)
+            DIAG["ip_check_err"] = repr(e)
         try:
             c.send("Page.navigate", {"url": "https://qoder.com/account/profile"})
             time.sleep(9)
